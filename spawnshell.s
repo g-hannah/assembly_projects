@@ -1,4 +1,4 @@
-.section	.rodata
+.section .rodata
 	PATH_TO_SHELL: .asciz "/bin/sh"
 	.align 16
 	.equ SYS_EXECVE,59
@@ -11,11 +11,12 @@
 	movq	%rsp,%rbx
 .endm
 
-.global		_start
+.global	_start
 
+# execve("/bin/sh", NULL, NULL)
 _start:
 	NULL_PTR_BX
-	mov		$PATH_TO_SHELL,%rdi
+	mov	$PATH_TO_SHELL,%rdi
 	movq	%rbx,%rsi
 	movq	%rbx,%rdx
 	movb	$SYS_EXECVE,%al
