@@ -8,12 +8,18 @@
 	E_ARGC: .asciz "xor </path/to/file>\n"
 	.equ E_ARGC_LEN,(. - E_ARGC)
 	.align 16
-	E_FILE_EXIST: .asciz "File does not exist!\n"
+	E_ACCESS_EXIST: .asciz "File does not exist\n"
 	.align 16
-	.equ E_FEXIST_LEN,(. - E_FILE_EXIST)
-	E_FILE_READ: .asciz "No permission to read file!\n"
+	.equ E_ACCESS_EXIST_LEN,(. - E_ACCESS_EXIST)
+	E_ACCESS_READ: .acsiz "No permission to read file\n"
+	.align 16
+	.equ E_ACCCESS_READ_LEN,(. - E_ACCESS_READ)
+	E_FILE_READ: .asciz "Error reading from file\n"
 	.align 16
 	.equ E_FREAD_LEN,(. - E_FILE_READ)
+	E_FILE_WRITE: .asciz "Error writing to file\n"
+	.align 16
+	.equ E_FWRITE_LEN,(. - E_FILE_WRITE)
 	E_FILE_CREATE: .asciz "Failed to create xor.out\n"
 	.align 16
 	.equ E_FCREATE_LEN,(. - E_FILE_CREATE)
@@ -45,12 +51,6 @@
 	.lcomm FILE_BUFFER,8192
 
 .section .text
-
-.macro NULL_PTR_BX
-	xorq %rax,%rax
-	pushq %rax
-	movq	%rsp,%rbx
-.endm
 
 .macro PUT_CREATION_FLAGS
 	xorq %rsi,%rsi
@@ -101,15 +101,24 @@
 	je $ERR_OUT
 .endm
 
-.macro CHECK_FILE __file
-	movq \__file,%rdi
+.macro CHECK_FILE _FILE
+	movq \_FILE,%rdi
 	movq $F_OK,%rsi
 	movq $SYS_ACCESS,%rax
 	syscall
 	testq	%rax,%rax
 	setbe	%cl
-	movq $E_FILE_EXIST,%rsi
-	movq $E_FEXIST_LEN,%rdx
+	movq $E_ACCESS_EXIST,%rsi
+	movq $E_ACCESS_EXIST_LEN,%rdx
+	cmpb $1,%cl
+	je $ERR_OUT
+	movq $R_OK,%rsi
+	movq $SYS_ACCESS,%rax
+	syscall
+	testq %rax,%rax
+	setbe %cl
+	movq $E_ACCESS_READ,%rsi
+	movq $E_ACCESS_READ_LEN,%rdx
 	cmpb $1,%cl
 	je $ERR_OUT
 .endm
@@ -190,6 +199,7 @@ xor_loop:
 	pop %rdx
 	movq $8(%rsp),%rdi
 	WRITE_TO_FILE %rdi, $FILE_BUFFER, %rdx
+	jmp read_more
 xor_done:
 	
 ERR_OUT:
