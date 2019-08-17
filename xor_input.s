@@ -1,6 +1,7 @@
 .section .rodata
 	DRANDOM: .asciz "/dev/urandom"
 	.align 16
+	DEFAULT_OUTFILE: .asciz "xor.out"
 	E_ARGC: .asciz "xor </path/to/file>\n"
 	.equ E_ARGC_LEN,(. - E_ARGC)
 	.align 16
@@ -17,6 +18,11 @@
 	.equ SYS_WRITE,1
 	.equ SYS_OPEN,2
 	.equ O_RDONLY,0
+	.equ O_WRONLY,1
+	.equ O_RDWR,2
+	.equ O_CREAT,0x100
+	.equ O_TRUNC,0x200
+	.equ S_IRUSR,0x400
 	.equ SYS_CLOSE,3
 	.equ SYS_ACCESS,21
 	.equ F_OK,0
@@ -34,6 +40,13 @@
 	xorq %rax,%rax
 	pushq %rax
 	movq	%rsp,%rbx
+.endm
+
+.macro PUT_CREATION_FLAGS
+	xorq %rsi,%rsi
+	movq $O_RDWR,%rsi
+	orq $O_CREAT,%rsi
+	orq $O_TRUNC,%rsi
 .endm
 
 .macro CHECK_FILE __file
