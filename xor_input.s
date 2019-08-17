@@ -1,6 +1,9 @@
 .section .rodata
 	DRANDOM: .asciz "/dev/urandom"
 	.align 16
+	E_DRANDOM_OPEN: .asciz "Failed to open /dev/urandom\n"
+	.align 16
+	.equ E_DRANDOM_LEN,(. - E_DRANDOM_OPEN)
 	DEFAULT_OUTFILE: .asciz "xor.out"
 	E_ARGC: .asciz "xor </path/to/file>\n"
 	.equ E_ARGC_LEN,(. - E_ARGC)
@@ -11,6 +14,12 @@
 	E_FILE_READ: .asciz "No permission to read file!\n"
 	.align 16
 	.equ E_FREAD_LEN,(. - E_FILE_READ)
+	E_FILE_CREATE: .asciz "Failed to create xor.out\n"
+	.align 16
+	.equ E_FCREATE_LEN,(. - E_FILE_CREATE)
+	E_FILE_OPEN: .asciz "Failed to open file\n"
+	.align 16
+	.equ E_FOPEN_LEN,(. - E_FILE_OPEN)
 
 	.equ EXIT_SUCCESS,0
 	.equ EXIT_FAILURE,1
@@ -29,6 +38,7 @@
 	.equ R_OK,4
 	.equ SYS_EXIT,60
 	.equ STDOUT_FILENO,1
+	.equ BUFFER_SIZE,8192
 
 .section .bss
 	.lcomm RAND_BUFFER,8192
@@ -47,6 +57,48 @@
 	movq $O_RDWR,%rsi
 	orq $O_CREAT,%rsi
 	orq $O_TRUNC,%rsi
+.endm
+
+.macro OPEN_FILE _FILE_LOC,_OPEN_FLAGS,_OPEN_MODE,_EMSG,_EMSG_LEN
+	movq \_FILE_LOC,%rdi
+	movq \_OPEN_FLAGS,%rsi
+	movq \_OPEN_MODE,%rdx
+	movq $SYS_OPEN,%rax
+	syscall
+	cmpq $0,%rax
+	setbl %cl
+	movq \_EMSG,%rsi
+	movq \_EMSG_LEN,%rdx
+	cmpb $1,%cl
+	je $ERR_OUT
+.endm
+
+.macro READ_BLOCK _FD, _BUFFER, _BUFFER_SIZE
+	movq \_FD,%rdi
+	movq \_BUFFER,%rsi
+	movq \_BUFFER_SIZE,%rdx
+	movq $SYS_READ,%rax
+	syscall
+	cmpq $0,%rax
+	setbl %cl
+	movq $E_FILE_READ,%rsi
+	movq $E_FREAD_LEN,%rdx
+	cmpb $1,%cl
+	je $ERR_OUT
+.endm
+
+.macro WRITE_TO_FILE _FD, _BUFFER, _NUM_BYTES
+	movq \_FD,%rdi
+	movq \_BUFFER,%rsi
+	movq \_NUM_BYTES,%rdx
+	movq $SYS_WRITE,%rax
+	syscall
+	cmpq \_NUM_BYTES,%rax
+	setbl %cl
+	movq $E_FILE_WRITE,%rsi
+	movq $E_FWRITE_LEN,%rdx
+	cmpb $1,%cl
+	je $ERR_OUT
 .endm
 
 .macro CHECK_FILE __file
@@ -90,13 +142,56 @@ _start:
 	cmpb $1,%cl
 	je $ERR_OUT
 	pop %rdi
+	PUT_CREATION_FLAGS
+	OPEN_FILE $DEFAULT_OUTFILE, %rsi, $S_IRUSR, $E_DRANDOM_OPEN, $E_DRANDOM_LEN
+	movq %rax,%r8
+	movq $8(%rsp),%rdi
+	xorq %rdx,%rdx
+	OPEN_FILE %rdi, $O_RDONLY, %rdx, $E_FILE_OPEN, $E_FOPEN_LEN
+	movq %r8,%rdi
+	movq %r9,%rsi
+	call do_file_xor
+	
+do_file_xor:
+	pushq %rdi
+	pushq %rdi
+	xorq %rdx,%rdx
+	OPEN_FILE $DRANDOM, $O_RDONLY, %rdx, $E_DRANDOM_OPEN, $E_DRANDOM_LEN
+	movq %rax,%r15
+	movq (%rsp),%rdi
+read_more:
+	READ_BLOCK %rdi, $FILE_BUFFER, $BUFFER_SIZE
+	testq %rax,%rax
+	je xor_done
+	movq %rax,%rdx
+	pushq %rax
+	movq $16(%rsp),%rdi
+	READ_BLOCK %rdi, $RAND_BUFFER, %rdx
+	pushq %rdx
+	pop %rcx
+	dec %rcx
+#
+# STACK:
+#
+# [ fd xor.out      ]
+# [ fd input file   ]
+# [ #bytes read from in file ]
 
-# TODO
-# Read blocks of DRANDOM and input file to
-# RAND_BUFFER and FILE_BUFFER respectively.
-# Xor together and write encrypted FILE_BUFFER
-# to new file.
-
+xor_loop:
+	movq $FILE_BUFFER,%rdi
+	movq $RAND_BUFFER,%rsi
+	movb (%rdi,%rcx,),%bl
+	movb (%rsi,%rcx,),%dl
+	xorb %bl,%dl
+	movb %dl,(%rdi,%rcx,)
+	dec %rcx
+	testq %rcx,%rcx
+	jne xor_loop
+	pop %rdx
+	movq $8(%rsp),%rdi
+	WRITE_TO_FILE %rdi, $FILE_BUFFER, %rdx
+xor_done:
+	
 ERR_OUT:
 	movq $STDOUT_FILENO,%rdi
 	movq $SYS_WRITE,%rax
