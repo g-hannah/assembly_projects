@@ -1,31 +1,36 @@
 .section .rodata
 	DRANDOM: .asciz "/dev/urandom"
-	.align 16
+
 	E_DRANDOM_OPEN: .asciz "Failed to open /dev/urandom\n"
-	.align 16
 	.equ E_DRANDOM_LEN,(. - E_DRANDOM_OPEN)
+
 	DEFAULT_OUTFILE: .asciz "xor.out"
+
 	E_ARGC: .asciz "xor </path/to/file>\n"
 	.equ E_ARGC_LEN,(. - E_ARGC)
-	.align 16
+
 	E_ACCESS_EXIST: .asciz "File does not exist\n"
-	.align 16
 	.equ E_ACCESS_EXIST_LEN,(. - E_ACCESS_EXIST)
-	E_ACCESS_READ: .acsiz "No permission to read file\n"
-	.align 16
-	.equ E_ACCCESS_READ_LEN,(. - E_ACCESS_READ)
+
+	E_ACCESS_READ: .asciz "No permission to read file\n"
+	.equ E_ACCESS_READ_LEN,(. - E_ACCESS_READ)
+
 	E_FILE_READ: .asciz "Error reading from file\n"
-	.align 16
 	.equ E_FREAD_LEN,(. - E_FILE_READ)
+
 	E_FILE_WRITE: .asciz "Error writing to file\n"
-	.align 16
 	.equ E_FWRITE_LEN,(. - E_FILE_WRITE)
+
 	E_FILE_CREATE: .asciz "Failed to create xor.out\n"
-	.align 16
 	.equ E_FCREATE_LEN,(. - E_FILE_CREATE)
+
 	E_FILE_OPEN: .asciz "Failed to open file\n"
-	.align 16
 	.equ E_FOPEN_LEN,(. - E_FILE_OPEN)
+
+	OPERATION_COMPLETE: .asciz "Finished XORing file\n"
+	.equ OPERATION_COMPLETE_LEN,(. - OPERATION_COMPLETE)
+
+	.align 16
 
 	.equ EXIT_SUCCESS,0
 	.equ EXIT_FAILURE,1
@@ -45,6 +50,8 @@
 	.equ SYS_EXIT,60
 	.equ STDOUT_FILENO,1
 	.equ BUFFER_SIZE,8192
+
+	.align 16
 
 .section .bss
 	.lcomm RAND_BUFFER,8192
@@ -66,11 +73,11 @@
 	movq $SYS_OPEN,%rax
 	syscall
 	cmpq $0,%rax
-	setbl %cl
+	setl %cl
 	movq \_EMSG,%rsi
 	movq \_EMSG_LEN,%rdx
 	cmpb $1,%cl
-	je $ERR_OUT
+	je .ERR_OUT
 .endm
 
 .macro READ_BLOCK _FD, _BUFFER, _BUFFER_SIZE
@@ -80,11 +87,11 @@
 	movq $SYS_READ,%rax
 	syscall
 	cmpq $0,%rax
-	setbl %cl
+	setl %cl
 	movq $E_FILE_READ,%rsi
 	movq $E_FREAD_LEN,%rdx
 	cmpb $1,%cl
-	je $ERR_OUT
+	je .ERR_OUT
 .endm
 
 .macro WRITE_TO_FILE _FD, _BUFFER, _NUM_BYTES
@@ -94,11 +101,11 @@
 	movq $SYS_WRITE,%rax
 	syscall
 	cmpq \_NUM_BYTES,%rax
-	setbl %cl
+	setl %cl
 	movq $E_FILE_WRITE,%rsi
 	movq $E_FWRITE_LEN,%rdx
 	cmpb $1,%cl
-	je $ERR_OUT
+	je .ERR_OUT
 .endm
 
 .macro CHECK_FILE _FILE
@@ -107,26 +114,20 @@
 	movq $SYS_ACCESS,%rax
 	syscall
 	testq	%rax,%rax
-	setbe	%cl
+	setne	%cl
 	movq $E_ACCESS_EXIST,%rsi
 	movq $E_ACCESS_EXIST_LEN,%rdx
 	cmpb $1,%cl
-	je $ERR_OUT
+	je .ERR_OUT
 	movq $R_OK,%rsi
 	movq $SYS_ACCESS,%rax
 	syscall
 	testq %rax,%rax
-	setbe %cl
+	setne %cl
 	movq $E_ACCESS_READ,%rsi
 	movq $E_ACCESS_READ_LEN,%rdx
 	cmpb $1,%cl
-	je $ERR_OUT
-.endm
-
-.macro PRELOGUE
-	andq $-16,%rsp
-	pushq %rbp
-	movq %rsp,%rbp
+	je .ERR_OUT
 .endm
 
 .global _start
@@ -134,47 +135,34 @@
 _start:
 	movq (%rsp),%rdi
 	cmpb $2,%dl
-	setbne %cl
+	setne %cl
 	movq $E_ARGC,%rsi
 	movq $E_ARGC_LEN,%rdx
 	cmpb $1,%cl
-	je $ERR_OUT
-	leaq $8(%rsp),%rdi
-	movq $F_OK,%rsi
-	movq $SYS_ACCESS,%rax
+	je .ERR_OUT
+	leaq 8(%rsp),%rdi
 	pushq %rdi
-	syscall
-	testq %rax,%rax
-	setbne %cl
-	movq $E_FILE_EXIST,%rsi
-	movq $E_FEXIST_LEN,%rdx
-	cmpb $1,%cl
-	je $ERR_OUT
-	pop %rdi
+	CHECK_FILE %rdi
 	PUT_CREATION_FLAGS
 	OPEN_FILE $DEFAULT_OUTFILE, %rsi, $S_IRUSR, $E_DRANDOM_OPEN, $E_DRANDOM_LEN
 	movq %rax,%r8
-	movq $8(%rsp),%rdi
+	pop %rdi
 	xorq %rdx,%rdx
 	OPEN_FILE %rdi, $O_RDONLY, %rdx, $E_FILE_OPEN, $E_FOPEN_LEN
-	movq %r8,%rdi
-	movq %r9,%rsi
-	call do_file_xor
-	
-do_file_xor:
-	pushq %rdi
-	pushq %rdi
+.do_file_xor:
+	pushq %r8
+	pushq %r9
 	xorq %rdx,%rdx
 	OPEN_FILE $DRANDOM, $O_RDONLY, %rdx, $E_DRANDOM_OPEN, $E_DRANDOM_LEN
 	movq %rax,%r15
 	movq (%rsp),%rdi
-read_more:
+.read_more:
 	READ_BLOCK %rdi, $FILE_BUFFER, $BUFFER_SIZE
 	testq %rax,%rax
-	je xor_done
+	je .xor_done
 	movq %rax,%rdx
 	pushq %rax
-	movq $16(%rsp),%rdi
+	movq 16(%rsp),%rdi
 	READ_BLOCK %rdi, $RAND_BUFFER, %rdx
 	pushq %rdx
 	pop %rcx
@@ -184,9 +172,9 @@ read_more:
 #
 # [ fd xor.out      ]
 # [ fd input file   ]
-# [ #bytes read from in file ]
+# [ #bytes read from in file ] <= %rsp
 
-xor_loop:
+.xor_loop:
 	movq $FILE_BUFFER,%rdi
 	movq $RAND_BUFFER,%rsi
 	movb (%rdi,%rcx,),%bl
@@ -195,14 +183,23 @@ xor_loop:
 	movb %dl,(%rdi,%rcx,)
 	dec %rcx
 	testq %rcx,%rcx
-	jne xor_loop
+	jne .xor_loop
 	pop %rdx
-	movq $8(%rsp),%rdi
+	movq 8(%rsp),%rdi
 	WRITE_TO_FILE %rdi, $FILE_BUFFER, %rdx
-	jmp read_more
-xor_done:
+	jmp .read_more
+
+.xor_done:
+	movq $STDOUT_FILENO,%rdi
+	movq $OPERATION_COMPLETE,%rsi
+	movq $OPERATION_COMPLETE_LEN,%rdx
+	movq $SYS_WRITE,%rax
+	syscall
+	movq $EXIT_SUCCESS,%rdi
+	movq $SYS_EXIT,%rax
+	syscall
 	
-ERR_OUT:
+.ERR_OUT:
 	movq $STDOUT_FILENO,%rdi
 	movq $SYS_WRITE,%rax
 	syscall
