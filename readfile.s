@@ -1,3 +1,5 @@
+# Open file, print contents to stdout
+
 .section	.rodata
 	ARGC_ERROR: .asciz "Arguments required...\n"
 	.align 16
@@ -5,6 +7,9 @@
 	OPEN_ERROR: .asciz "Error opening file...\n"
 	.align 16
 	.equ OPEN_ELEN,(. - OPEN_ERROR)
+	
+	.equ EXIT_SUCCESS,0
+	.equ EXIT_FAILURE,1
 	.equ SYS_READ,0
 	.equ SYS_WRITE,1
 	.equ SYS_OPEN,2
@@ -21,41 +26,36 @@
 .endm
 
 .macro EPILOGUE
-	pop		%rbp
+	pop %rbp
 .endm
 
-.global		_start
+.global	_start
 
 _start:
 	PRELOGUE
-# STACK:
-#
-# [   argv  ]
-# [   argc  ]
-# [   rbp   ]
 	movq	0x8(%rsp),%rax
 	movq	$ARGC_ERROR,%rsi
 	movq	$ARGC_ELEN,%rdx
 	cmpb	$2,%al
-	jl		.ERROR
+	jl	.ERROR
 	leaq	0x10(%rsp),%rsi
 	movq	8(%rsi),%rdi
-	mov		$O_RDONLY,%rsi
-	mov		$0,%rdx
-	mov		$SYS_OPEN,%rax
+	mov	$O_RDONLY,%rsi
+	mov	$0,%rdx
+	mov	$SYS_OPEN,%rax
 	syscall
 	movq	%rax,%r8
 	movq	$OPEN_ERROR,%rsi
 	movq	$OPEN_ELEN,%rdx
 	cmpb	$3,%al
-	jl		.ERROR
+	jl	.ERROR
 
 .READMORE:
 	subq	$RBLOCK_SIZE,%rsp
 	movq	%r8,%rdi
 	movq	%rsp,%rsi
 	movq	$RBLOCK_SIZE,%rdx
-	mov		$SYS_READ,%rax
+	mov	$SYS_READ,%rax
 	syscall
 
 	movq	%rax,%r9
@@ -63,26 +63,26 @@ _start:
 	testq	%r9,%r9
 	setbe	%bl
 
-	mov		$STDOUT_FILENO,%rdi
+	mov	$STDOUT_FILENO,%rdi
 	movq	%rax,%rdx
-	mov		$SYS_WRITE,%rax
+	mov	$SYS_WRITE,%rax
 	push	%r8
 	push	%r9
 	push	%rbx
 	syscall
-	pop		%rbx
-	pop		%r9
-	pop		%r8
+	pop	%rbx
+	pop	%r9
+	pop	%r8
 	cmpb	$1,%bl
-	jne		.READMORE
-	movq	$0,%rdi
+	jne	.READMORE
+	movq	$EXIT_SUCCESS,%rdi
 .DONE:
 	EPILOGUE
-	mov		$SYS_EXIT,%rax
+	mov	$SYS_EXIT,%rax
 	syscall
 .ERROR:
-	mov		$STDOUT_FILENO,%rdi
-	mov		$SYS_WRITE,%rax
+	mov	$STDOUT_FILENO,%rdi
+	mov	$SYS_WRITE,%rax
 	syscall
-	movq	$-1,%rax
-	jmp		.DONE
+	movq	$EXIT_FAILURE,%rax
+	jmp	.DONE
