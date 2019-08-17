@@ -1,3 +1,9 @@
+#######################################################################
+#  Open file specified by user, obtain random data of same length as  #
+#  file from /dev/urandom, xor it together and write the result into  #
+#  ./xor.out                                                          #
+#######################################################################
+
 .section .rodata
 	DRANDOM: .asciz "/dev/urandom"
 
