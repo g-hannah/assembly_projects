@@ -17,7 +17,6 @@
 	.equ STDOUT_FILENO,1
 	.equ O_RDONLY,0
 	.equ RBLOCK_SIZE,0x1000
-	.equ SHIFT_BITS,3
 
 .macro PRELOGUE
 	andq	$-16,%rsp
