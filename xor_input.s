@@ -182,8 +182,8 @@ _start:
 	xorb %bl,%dl
 	movb %dl,(%rdi,%rcx,)
 	dec %rcx
-	testq %rcx,%rcx
-	jne .xor_loop
+	cmpq $0,%rcx
+	jge .xor_loop
 	pop %rdx
 	movq 8(%rsp),%rdi
 	WRITE_TO_FILE %rdi, $FILE_BUFFER, %rdx
