@@ -160,7 +160,7 @@ _start:
 	pushq %r9
 	xorq %rdx,%rdx
 	OPEN_FILE $DRANDOM, $O_RDONLY, %rdx, $E_DRANDOM_OPEN, $E_DRANDOM_LEN
-	movq %rax,%r15
+	pushq %rax
 	movq (%rsp),%rdi
 .read_more:
 	READ_BLOCK %rdi, $FILE_BUFFER, $BUFFER_SIZE
@@ -168,16 +168,16 @@ _start:
 	je .xor_done
 	movq %rax,%rdx
 	pushq %rax
-	movq 16(%rsp),%rdi
+	movq 8(%rsp),%rdi
 	READ_BLOCK %rdi, $RAND_BUFFER, %rdx
-	pushq %rdx
-	pop %rcx
+	movq (%rsp),%rcx
 	dec %rcx
 #
 # STACK:
 #
 # [ fd xor.out      ]
 # [ fd input file   ]
+# [ fd /dev/urandom ]
 # [ #bytes read from in file ] <= %rsp
 
 .xor_loop:
@@ -191,8 +191,9 @@ _start:
 	cmpq $0,%rcx
 	jge .xor_loop
 	pop %rdx
-	movq 8(%rsp),%rdi
+	movq 16(%rsp),%rdi
 	WRITE_TO_FILE %rdi, $FILE_BUFFER, %rdx
+	movq 8(%rsp),%rdi
 	jmp .read_more
 
 .xor_done:
