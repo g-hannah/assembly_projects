@@ -81,8 +81,8 @@ _start:
 # TODO
 # Read blocks of DRANDOM and input file to
 # RAND_BUFFER and FILE_BUFFER respectively.
-# Xor each byte and store result in
-# OUT_BUFFER. Write OUT_BUFFER to file.
+# Xor together and write encrypted FILE_BUFFER
+# to new file.
 
 ERR_OUT:
 	movq $STDOUT_FILENO,%rdi
