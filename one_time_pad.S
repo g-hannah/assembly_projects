@@ -354,4 +354,3 @@ _start:
 	jge .cmp_str_l3
 	movq DOLLAR(0),%rax
 	jmp .cmp_str_l1
-.endm
