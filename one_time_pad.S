@@ -169,6 +169,83 @@
 	je .err_out
 .endm
 
+.macro PUSH_REGS
+	pushq %rbx
+	pushq %rcx
+	pushq %rdx
+	pushq %r8
+	pushq %r9
+	pushq %r10
+	pushq %r11
+	pushq %r12
+	pushq %r13
+	pushq %r14
+	pushq %r15
+.endm
+
+.macro POP_REGS
+	pop %r15
+	pop %r14
+	pop %r13
+	pop %r12
+	pop %r11
+	pop %r10
+	pop %r9
+	pop %r8
+	pop %rdx
+	pop %rcx
+	pop %rbx
+.endm
+
+# @rdi: name of env var
+# @rsi: starting stack address to begin search
+# @rdx: number of bytes to compare
+.get_env_var:
+	movq DOLLAR(1),%rcx
+	pushq %rdx
+	pushq %rsi
+	pushq %rdi
+.continue_search:
+	movq 8(%rsp),%rdx
+	movq (%rdx,%rcx,8),%rsi
+	testq %rsi,%rsi
+	je .get_env_var_notfound
+	movq (%rsp),%rdi
+	movq 16(%rsp),%rdx
+	pushq %rsi
+	pushq %rcx
+	call cmp_str
+	pop %rcx
+	testq %rax,%rax
+	je .extract_value
+	inc %rcx
+	jmp .continue_search
+.get_env_var_notfound:
+	movq DOLLAR(-1),%rax
+	ret
+.extract_value:
+	pop %rdi
+	movq DOLLAR(0),%rcx
+	movb DOLLAR(0x3d),%rax
+	scasb repne
+	inc %rcx
+	movq %rcx,value_offset
+	movq DOLLAR(0),%rax
+	movq %rax,%rcx
+	scasb repne
+	inc %rcx
+	
+
+.macro GET_ENV_VAR _ENV_STR
+	movq \_ENV_STR,%rdi
+	movq DOLLAR(4),%rcx
+.continue_searching:
+	movq (%rsp,%rcx,8),%rsi
+	call .cmp_str
+	testq %rax,%rax
+	
+.endm
+
 .macro ZERO_REG _REG
 	xorq \_REG,\_REG
 .endm
@@ -252,3 +329,29 @@ _start:
 	movq DOLLAR(EXIT_FAILURE),%rdi
 	movq DOLLAR(SYS_EXIT),%rax
 	syscall
+
+.cmp_str:
+	PUSH_REGS
+	GET_STR_LEN %rdi
+	movq %rax,%rbx
+	GET_STR_LEN %rsi
+	movq %rax,%rcx
+	cmpq %rcx,%rbx
+	je .cmp_str_l2
+	movq DOLLAR(1),%rax
+.cmp_str_l1:
+	POP_REGS
+	ret
+.cmp_str_l2:
+	dec %rcx
+.cmp_str_l3:
+	movb (%rdi,%rcx,1),%r8
+	movb (%rsi,%rcx,1),%r9
+	cmpb %r8,%r9
+	jne .cmp_str_l1
+	dec %rcx
+	cmpq DOLLAR(0),%rcx
+	jge .cmp_str_l3
+	movq DOLLAR(0),%rax
+	jmp .cmp_str_l1
+.endm
