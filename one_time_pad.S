@@ -10,6 +10,8 @@
 # define DOLLAR(x) $ ## x
 #endif
 
+#define VARIABLE(x) .globl x ; .type x, @object ; x:
+
 .section .rodata
 	DRANDOM: .asciz "/dev/urandom"
 	E_DRANDOM_OPEN: .asciz "Failed to open /dev/urandom\n"
@@ -65,27 +67,20 @@
 	.equ STDOUT_FILENO,1
 	.equ BUFFER_SIZE,8192
 
-#############################
-# FIXME:
-#
-# LD is complaining that
-# references to these vars
-# are undefined.
-#
-# # # # # # # # # # # # # # #
 .section .data
-	FD_INFILE: .int -1
-	FD_OUTFILE: .int -1
-	FD_KEYFILE: .int -1
-	FD_DRANDOM: .int -1
-	BYTES_READ: .int 0
-	PTR_INFILE: .long 0
+	VARIABLE(fd_infile) .int -1
+	VARIABLE(fd_outfile) .int -1
+	VARIABLE(fd_keyfile) .int -1
+	VARIABLE(fd_drandom) .int -1
+	VARIABLE(bytes_read) .int 0
+	VARIABLE(ptr_infile) .long 0
 .align 4,0
 
 .section .bss
 	.lcomm RAND_BUFFER,8192
 	.lcomm FILE_BUFFER,8192
 
+.section .text
 .macro PUT_CREATION_FLAGS
 	xorq %rsi,%rsi
 	movq DOLLAR(O_RDWR),%rsi
@@ -105,11 +100,12 @@
 	movq \_OPEN_MODE,%rdx
 	movq DOLLAR(SYS_OPEN),%rax
 	syscall
+	ZERO_REG %r8
 	cmpq DOLLAR(0),%rax
-	setl %cl
+	setl %r8b
 	movq \_EMSG,%rsi
 	movq \_EMSG_LEN,%rdx
-	cmpb DOLLAR(1),%cl
+	cmpb DOLLAR(1),%r8b
 	je .err_out
 .endm
 
@@ -125,11 +121,12 @@
 	movq \_BUFFER_SIZE,%rdx
 	movq DOLLAR(SYS_READ),%rax
 	syscall
+	ZERO_REG %r8
 	cmpq DOLLAR(0),%rax
-	setl %cl
+	setl %r8b
 	movq DOLLAR(E_FILE_READ),%rsi
 	movq DOLLAR(E_FREAD_LEN),%rdx
-	cmpb DOLLAR(1),%cl
+	cmpb DOLLAR(1),%r8b
 	je .err_out
 .endm
 
@@ -139,11 +136,12 @@
 	movq \_NUM_BYTES,%rdx
 	movq DOLLAR(SYS_WRITE),%rax
 	syscall
+	ZERO_REG %r8
 	cmpq \_NUM_BYTES,%rax
-	setl %cl
+	setl %r8b
 	movq DOLLAR(E_FILE_WRITE),%rsi
 	movq DOLLAR(E_FWRITE_LEN),%rdx
-	cmpb DOLLAR(1),%cl
+	cmpb DOLLAR(1),%r8b
 	je .err_out
 .endm
 
@@ -152,20 +150,22 @@
 	movq DOLLAR(F_OK),%rsi
 	movq DOLLAR(SYS_ACCESS),%rax
 	syscall
+	ZERO_REG %r8
 	testq	%rax,%rax
-	setne	%cl
+	setne %r8b
 	movq DOLLAR(E_ACCESS_EXIST),%rsi
 	movq DOLLAR(E_ACCESS_EXIST_LEN),%rdx
-	cmpb DOLLAR(1),%cl
+	cmpb DOLLAR(1),%r8b
 	je .err_out
 	movq DOLLAR(R_OK),%rsi
 	movq DOLLAR(SYS_ACCESS),%rax
 	syscall
+	ZERO_REG %r8
 	testq %rax,%rax
-	setne %cl
+	setne %r8b
 	movq DOLLAR(E_ACCESS_READ),%rsi
 	movq DOLLAR(E_ACCESS_READ_LEN),%rdx
-	cmpb DOLLAR(1),%cl
+	cmpb DOLLAR(1),%r8b
 	je .err_out
 .endm
 
@@ -173,45 +173,46 @@
 	xorq \_REG,\_REG
 .endm
 
-.global _start
+.globl _start
 
 _start:
 	movq (%rsp),%rdi
-	cmpb DOLLAR(2),%dl
-	setne %cl
+	ZERO_REG %r8
+	cmpq DOLLAR(2),%rdi
+	setne %r8b
 	movq DOLLAR(E_ARGC),%rsi
 	movq DOLLAR(E_ARGC_LEN),%rdx
-	cmpb DOLLAR(1),%cl
+	cmpb DOLLAR(1),%r8b
 	je .err_out
-	leaq 8(%rsp),%rax
-	movq %rax,(DOLLAR(PTR_INFILE))
+	leaq 0x10(%rsp),%rax
+	movq %rax,(ptr_infile)
 	CHECK_FILE %rax
 	PUT_CREATION_FLAGS
 	PUT_RDWR_MODE
 	OPEN_FILE DOLLAR(DEFAULT_OUTFILE),%rsi,%rdx,DOLLAR(E_DRANDOM_OPEN),DOLLAR(E_DRANDOM_LEN)
-	movq %rax,(DOLLAR(FD_OUTFILE))
+	movq %rax,(fd_outfile)
 	PUT_CREATION_FLAGS
 	PUT_RDWR_MODE
 	OPEN_FILE DOLLAR(DEFAULT_KEYFILE),%rsi,%rdx,DOLLAR(E_FILE_OPEN),DOLLAR(E_FOPEN_LEN)
-	movq %rax,(DOLLAR(FD_KEYFILE))
+	movq %rax,(fd_keyfile)
 	ZERO_REG %rdx
-	movq (DOLLAR(PTR_INFILE)),%rdi
+	movq (ptr_infile),%rdi
 	OPEN_FILE %rdi,DOLLAR(O_RDONLY),%rdx,DOLLAR(E_FILE_OPEN),DOLLAR(E_FOPEN_LEN)
-	movq %rax,(DOLLAR(FD_INFILE))
+	movq %rax,(fd_infile)
 .do_file_xor:
 	ZERO_REG %rdx
 	OPEN_FILE DOLLAR(DRANDOM),DOLLAR(O_RDONLY),%rdx,DOLLAR(E_DRANDOM_OPEN),DOLLAR(E_DRANDOM_LEN)
-	movq %rax,(DOLLAR(FD_DRANDOM))
-	movq (DOLLAR(FD_INFILE)),%rdi
+	movq %rax,(fd_drandom)
+	movq (fd_infile),%rdi
 .read_more:
 	READ_BLOCK %rdi,DOLLAR(FILE_BUFFER),DOLLAR(BUFFER_SIZE)
 	testq %rax,%rax
 	je .xor_done
-	movq %rax,(DOLLAR(BYTES_READ))
-	movq (DOLLAR(FD_DRANDOM)),%rdi
+	movq %rax,(bytes_read)
+	movq (fd_drandom),%rdi
 	movq %rax,%rdx
 	READ_BLOCK %rdi,DOLLAR(RAND_BUFFER),%rdx
-	movq (DOLLAR(BYTES_READ)),%rcx
+	movq (bytes_read),%rcx
 	dec %rcx
 .xor_loop:
 	movq DOLLAR(FILE_BUFFER),%rdi
@@ -223,19 +224,19 @@ _start:
 	dec %rcx
 	cmpq DOLLAR(0),%rcx
 	jge .xor_loop
-	movq (DOLLAR(FD_OUTFILE)),%rdi
-	movq (DOLLAR(BYTES_READ)),%rdx
+	movq (fd_outfile),%rdi
+	movq (bytes_read),%rdx
 	WRITE_TO_FILE %rdi,DOLLAR(FILE_BUFFER),%rdx
-	movq (DOLLAR(FD_KEYFILE)),%rdi
-	movq (DOLLAR(BYTES_READ)),%rdx
+	movq (fd_keyfile),%rdi
+	movq (bytes_read),%rdx
 	WRITE_TO_FILE %rdi,DOLLAR(RAND_BUFFER),%rdx
-	movq (DOLLAR(FD_INFILE)),%rdi
+	movq (fd_infile),%rdi
 	jmp .read_more
 .xor_done:
-	CLOSE_FILE DOLLAR(FD_INFILE)
-	CLOSE_FILE DOLLAR(FD_OUTFILE)
-	CLOSE_FILE DOLLAR(FD_KEYFILE)
-	CLOSE_FILE DOLLAR(FD_DRANDOM)
+	CLOSE_FILE fd_infile
+	CLOSE_FILE fd_outfile
+	CLOSE_FILE fd_keyfile
+	CLOSE_FILE fd_drandom
 	movq DOLLAR(STDOUT_FILENO),%rdi
 	movq DOLLAR(OPERATION_COMPLETE),%rsi
 	movq DOLLAR(OPERATION_COMPLETE_LEN),%rdx
