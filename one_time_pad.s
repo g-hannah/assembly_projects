@@ -1,7 +1,7 @@
 #######################################################################
 #  Open file specified by user, obtain random data of same length as  #
 #  file from /dev/urandom, xor it together and write the result into  #
-#  ./xor.out                                                          #
+#  ./xor.out. Write the random data to ./xor.key                      #
 #######################################################################
 
 .section .rodata
@@ -79,7 +79,7 @@
 	orq $O_TRUNC,%rsi
 .endm
 
-.macro PUT_RDWR_FLAGS
+.macro PUT_RDWR_MODE
 	xorq %rdx,%rdx
 	movq $S_IRUSR,%rdx
 	orq $S_IWUSR,%rdx
@@ -173,11 +173,11 @@ _start:
 	movq %rax,$PTR_INFILE
 	CHECK_FILE %rax
 	PUT_CREATION_FLAGS
-	PUT_RDWR_FLAGS
+	PUT_RDWR_MODE
 	OPEN_FILE $DEFAULT_OUTFILE,%rsi,%rdx,$E_DRANDOM_OPEN,$E_DRANDOM_LEN
 	movq %rax,$FD_OUTFILE
 	PUT_CREATION_FLAGS
-	PUT_RDWR_FLAGS
+	PUT_RDWR_MODE
 	OPEN_FILE $DEFAULT_KEYFILE,%rsi,%rdx,$E_FILE_OPEN,$E_FOPEN_LEN
 	movq %rax,$FD_KEYFILE
 	ZERO_REG %rdx
