@@ -2,6 +2,6 @@
 *.txt
 .*
 !.gitignore
-xor_input
+one_time_pad
 readfile
 spawnshell
