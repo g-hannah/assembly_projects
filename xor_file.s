@@ -11,6 +11,7 @@
 	.equ E_DRANDOM_LEN,(. - E_DRANDOM_OPEN)
 
 	DEFAULT_OUTFILE: .asciz "xor.out"
+	DEFAULT_KEYFILE: .asciz "xor.key"
 
 	E_ARGC: .asciz "xor </path/to/file>\n"
 	.equ E_ARGC_LEN,(. - E_ARGC)
@@ -36,8 +37,6 @@
 	OPERATION_COMPLETE: .asciz "Finished XORing file\n"
 	.equ OPERATION_COMPLETE_LEN,(. - OPERATION_COMPLETE)
 
-	.align 16
-
 	.equ EXIT_SUCCESS,0
 	.equ EXIT_FAILURE,1
 	.equ SYS_READ,0
@@ -59,9 +58,17 @@
 
 	.align 16
 
+.section .data
+	.int FD_INFILE,-1
+	.int FD_OUTFILE,-1
+	.int FD_KEYFILE,-1
+	.int FD_DRANDOM,-1
+	.long BYTES_READ,0
+
 .section .bss
 	.lcomm RAND_BUFFER,8192
 	.lcomm FILE_BUFFER,8192
+	.lcomm PTR_INFILE,8
 
 .section .text
 
@@ -70,6 +77,12 @@
 	movq $O_RDWR,%rsi
 	orq $O_CREAT,%rsi
 	orq $O_TRUNC,%rsi
+.endm
+
+.macro PUT_RDWR_FLAGS
+	xorq %rdx,%rdx
+	movq $S_IRUSR,%rdx
+	orq $S_IWUSR,%rdx
 .endm
 
 .macro OPEN_FILE _FILE_LOC,_OPEN_FLAGS,_OPEN_MODE,_EMSG,_EMSG_LEN
@@ -83,10 +96,16 @@
 	movq \_EMSG,%rsi
 	movq \_EMSG_LEN,%rdx
 	cmpb $1,%cl
-	je .ERR_OUT
+	je .err_out
 .endm
 
-.macro READ_BLOCK _FD, _BUFFER, _BUFFER_SIZE
+.macro CLOSE_FILE _FD_LOC
+	movq \_FD_LOC,%rdi
+	movq $SYS_CLOSE,%rax
+	syscall
+.endm
+
+.macro READ_BLOCK _FD,_BUFFER,_BUFFER_SIZE
 	movq \_FD,%rdi
 	movq \_BUFFER,%rsi
 	movq \_BUFFER_SIZE,%rdx
@@ -97,10 +116,10 @@
 	movq $E_FILE_READ,%rsi
 	movq $E_FREAD_LEN,%rdx
 	cmpb $1,%cl
-	je .ERR_OUT
+	je .err_out
 .endm
 
-.macro WRITE_TO_FILE _FD, _BUFFER, _NUM_BYTES
+.macro WRITE_TO_FILE _FD,_BUFFER,_NUM_BYTES
 	movq \_FD,%rdi
 	movq \_BUFFER,%rsi
 	movq \_NUM_BYTES,%rdx
@@ -111,7 +130,7 @@
 	movq $E_FILE_WRITE,%rsi
 	movq $E_FWRITE_LEN,%rdx
 	cmpb $1,%cl
-	je .ERR_OUT
+	je .err_out
 .endm
 
 .macro CHECK_FILE _FILE
@@ -124,7 +143,7 @@
 	movq $E_ACCESS_EXIST,%rsi
 	movq $E_ACCESS_EXIST_LEN,%rdx
 	cmpb $1,%cl
-	je .ERR_OUT
+	je .err_out
 	movq $R_OK,%rsi
 	movq $SYS_ACCESS,%rax
 	syscall
@@ -133,7 +152,11 @@
 	movq $E_ACCESS_READ,%rsi
 	movq $E_ACCESS_READ_LEN,%rdx
 	cmpb $1,%cl
-	je .ERR_OUT
+	je .err_out
+.endm
+
+.macro ZERO_REG _REG
+	xorq \_REG,\_REG
 .endm
 
 .global _start
@@ -145,41 +168,37 @@ _start:
 	movq $E_ARGC,%rsi
 	movq $E_ARGC_LEN,%rdx
 	cmpb $1,%cl
-	je .ERR_OUT
-	leaq 8(%rsp),%rdi
-	pushq %rdi
-	CHECK_FILE %rdi
+	je .err_out
+	leaq 8(%rsp),%rax
+	movq %rax,$PTR_INFILE
+	CHECK_FILE %rax
 	PUT_CREATION_FLAGS
-	OPEN_FILE $DEFAULT_OUTFILE, %rsi, $S_IRUSR, $E_DRANDOM_OPEN, $E_DRANDOM_LEN
-	movq %rax,%r8
-	pop %rdi
-	xorq %rdx,%rdx
-	OPEN_FILE %rdi, $O_RDONLY, %rdx, $E_FILE_OPEN, $E_FOPEN_LEN
+	PUT_RDWR_FLAGS
+	OPEN_FILE $DEFAULT_OUTFILE,%rsi,%rdx,$E_DRANDOM_OPEN,$E_DRANDOM_LEN
+	movq %rax,$FD_OUTFILE
+	PUT_CREATION_FLAGS
+	PUT_RDWR_FLAGS
+	OPEN_FILE $DEFAULT_KEYFILE,%rsi,%rdx,$E_FILE_OPEN,$E_FOPEN_LEN
+	movq %rax,$FD_KEYFILE
+	ZERO_REG %rdx
+	movq $PTR_INFILE,%rdi
+	OPEN_FILE %rdi,$O_RDONLY,%rdx,$E_FILE_OPEN,$E_FOPEN_LEN
+	movq %rax,$FD_INFILE
 .do_file_xor:
-	pushq %r8
-	pushq %r9
-	xorq %rdx,%rdx
-	OPEN_FILE $DRANDOM, $O_RDONLY, %rdx, $E_DRANDOM_OPEN, $E_DRANDOM_LEN
-	pushq %rax
-	movq (%rsp),%rdi
+	ZERO_REG %rdx
+	OPEN_FILE $DRANDOM,$O_RDONLY,%rdx,$E_DRANDOM_OPEN,$E_DRANDOM_LEN
+	movq %rax,$FD_DRANDOM
+	movq $FD_INFILE,%rdi
 .read_more:
-	READ_BLOCK %rdi, $FILE_BUFFER, $BUFFER_SIZE
+	READ_BLOCK %rdi,$FILE_BUFFER,$BUFFER_SIZE
 	testq %rax,%rax
 	je .xor_done
+	movq %rax,$BYTES_READ
+	movq $FD_DRANDOM,%rdi
 	movq %rax,%rdx
-	pushq %rax
-	movq 8(%rsp),%rdi
-	READ_BLOCK %rdi, $RAND_BUFFER, %rdx
-	movq (%rsp),%rcx
+	READ_BLOCK %rdi,$RAND_BUFFER,%rdx
+	movq $BYTES_READ,%rcx
 	dec %rcx
-#
-# STACK:
-#
-# [ fd xor.out      ]
-# [ fd input file   ]
-# [ fd /dev/urandom ]
-# [ #bytes read from in file ] <= %rsp
-
 .xor_loop:
 	movq $FILE_BUFFER,%rdi
 	movq $RAND_BUFFER,%rsi
@@ -190,13 +209,19 @@ _start:
 	dec %rcx
 	cmpq $0,%rcx
 	jge .xor_loop
-	pop %rdx
-	movq 16(%rsp),%rdi
-	WRITE_TO_FILE %rdi, $FILE_BUFFER, %rdx
-	movq 8(%rsp),%rdi
+	movq $FD_OUTFILE,%rdi
+	movq $BYTES_READ,%rdx
+	WRITE_TO_FILE %rdi,$FILE_BUFFER,%rdx
+	movq $FD_KEYFILE,%rdi
+	movq $BYTES_READ,%rdx
+	WRITE_TO_FILE %rdi,$RAND_BUFFER,%rdx
+	movq $FD_INFILE,%rdi
 	jmp .read_more
-
 .xor_done:
+	CLOSE_FILE $FD_INFILE
+	CLOSE_FILE $FD_OUTFILE
+	CLOSE_FILE $FD_KEYFILE
+	CLOSE_FILE $FD_DRANDOM
 	movq $STDOUT_FILENO,%rdi
 	movq $OPERATION_COMPLETE,%rsi
 	movq $OPERATION_COMPLETE_LEN,%rdx
@@ -205,8 +230,7 @@ _start:
 	movq $EXIT_SUCCESS,%rdi
 	movq $SYS_EXIT,%rax
 	syscall
-	
-.ERR_OUT:
+.err_out:
 	movq $STDOUT_FILENO,%rdi
 	movq $SYS_WRITE,%rax
 	syscall
