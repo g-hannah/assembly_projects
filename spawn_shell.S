@@ -1,6 +1,12 @@
+#ifdef __APPLE__
+# define DOLLAR(x) $$ ## x
+#else
+# define DOLLAR(x) $ ## x
+#endif
+
 .section .rodata
-	PATH_TO_SHELL: .asciz "/bin/sh"
-	.align 16
+	bin_sh: .ascii "/bin/sh"
+
 	.equ SYS_EXECVE,59
 
 .section .text
@@ -13,11 +19,12 @@
 
 .global	_start
 
-# execve("/bin/sh", NULL, NULL)
 _start:
+	pushq %rbp
+	movq %rsp,%rbp
 	NULL_PTR_BX
-	mov	$PATH_TO_SHELL,%rdi
-	movq	%rbx,%rsi
-	movq	%rbx,%rdx
-	movb	$SYS_EXECVE,%al
+	leaq bin_sh,%rdi
+	movq %rbx,%rsi
+	movq %rbx,%rdx
+	movq DOLLAR(SYS_EXECVE),%rax
 	syscall
