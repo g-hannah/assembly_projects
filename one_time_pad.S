@@ -203,7 +203,7 @@ _start:
 	leaq RAND_BUFFER,%rsi
 .l1:
 	movb (%rdi,%rcx,1),%bl
-	movb (%rdi,%rcx,1),%dl
+	movb (%rsi,%rcx,1),%dl
 	xorb %dl,%bl
 	movb %bl,(%rdi,%rcx,1)
 	dec %rcx
