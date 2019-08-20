@@ -5,3 +5,5 @@
 one_time_pad
 readfile
 spawnshell
+xor.out
+xor.key
