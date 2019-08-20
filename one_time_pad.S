@@ -1,8 +1,15 @@
-#######################################################################
-#  Open file specified by user, obtain random data of same length as  #
-#  file from /dev/urandom, xor it together and write the result into  #
-#  ./xor.out. Write the random data to ./xor.key                      #
-#######################################################################
+/*
+ * Obtain pseudo-random data from /dev/urandom and xor it with the
+ * data in the input file. Write the result to xor.out and write the
+ * pseudo-random data to xor.key.
+ *
+ * Use sparingly, as this steals precious system entropy
+ *
+ *
+ * gcc -nostdlib -o one_time_pad one_time_pad.S
+ *
+ *
+ */
 
 #ifdef __APPLE__
 # define DOLLAR(x) $$ ## x
@@ -75,9 +82,9 @@
 	movb \BYTE,%al
 	pushq %rax
 	movq %rsp,%rsi
-	movq $1,%rdx
-	movq $STDOUT_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(1),%rdx
+	movq DOLLAR(STDOUT_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	pop %rax
 .endm
@@ -87,9 +94,9 @@
 	movw \WORD,%ax
 	pushq %rax
 	movq %rsp,%rsi
-	movq $2,%rdx
-	movq $STDOUT_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(2),%rdx
+	movq DOLLAR(STDOUT_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	pop %rax
 .endm
@@ -99,9 +106,9 @@
 	movl \DWORD,%eax
 	pushq %rax
 	movq %rsp,%rsi
-	movq $4,%rdx
-	movq $STDOUT_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(4),%rdx
+	movq DOLLAR(STDOUT_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	pop %rax
 .endm
@@ -137,55 +144,55 @@
 _start:
 	pushq %rbp
 	movq %rsp,%rbp
-	subq $48,%rsp
+	subq DOLLAR(48),%rsp
 	movq 24(%rbp),%rax
 	movq %rax,loc_ptr_infile
-	movq $STDOUT_FILENO,%rdi
+	movq DOLLAR(STDOUT_FILENO),%rdi
 	leaq op_start_str,%rsi
-	movq $op_start_str_len,%rdx
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(op_start_str_len),%rdx
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
-	PRINT_BYTE $0x22
+	PRINT_BYTE DOLLAR(0x22)
 	movq loc_ptr_infile,%rsi
 	GET_STR_LEN %rsi
-	movq $STDOUT_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(STDOUT_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
-	PRINT_WORD $0x0a22
+	PRINT_WORD DOLLAR(0x0a22)
 	movq loc_ptr_infile,%rdi
-	movq $O_RDONLY,%rsi
+	movq DOLLAR(O_RDONLY),%rsi
 	ZERO %rdx
 	call .open_file
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .err_out
 	movq %rax,loc_fd_infile
 	leaq def_outfile,%rdi
 	PUT_CREATION_FLAGS
 	PUT_RDWR_MODE
 	call .open_file
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .err_out
 	movq %rax,loc_fd_outfile
 	leaq def_keyfile,%rdi
 	PUT_CREATION_FLAGS
 	PUT_RDWR_MODE
 	call .open_file
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .err_out
 	movq %rax,loc_fd_keyfile
 	leaq dev_urandom,%rdi
 	call .open_file
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .err_out
 	movq %rax,loc_fd_devrand
 
 .read_more:
 	movq loc_fd_infile,%rdi
 	leaq FILE_BUFFER,%rsi
-	movq $BUFFER_SIZE,%rdx
+	movq DOLLAR(BUFFER_SIZE),%rdx
 	movq loc_ptr_infile,%r10
 	call .read_file
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .err_out
 	movq %rax,loc_bytes_read
 
@@ -194,7 +201,7 @@ _start:
 	movq loc_bytes_read,%rdx
 	leaq dev_urandom,%r10
 	call .read_file
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .err_out
 
 	movq %rax,%rcx
@@ -207,47 +214,47 @@ _start:
 	xorb %dl,%bl
 	movb %bl,(%rdi,%rcx,1)
 	dec %rcx
-	cmpq $0,%rcx
+	cmpq DOLLAR(0),%rcx
 	jge .l1
 	movq loc_fd_outfile,%rdi
 	leaq FILE_BUFFER,%rsi
 	movq loc_bytes_read,%rdx
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	movq loc_fd_keyfile,%rdi
 	leaq RAND_BUFFER,%rsi
 	movq loc_bytes_read,%rdx
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	movq loc_bytes_read,%rax
 	testq %rax,%rax
 	jnz .read_more
 
-	movq $STDOUT_FILENO,%rdi
+	movq DOLLAR(STDOUT_FILENO),%rdi
 	leaq op_end_str,%rsi
-	movq $op_end_str_len,%rdx
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(op_end_str_len),%rdx
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
-	addq $48,%rsp
+	addq DOLLAR(48),%rsp
 	pop %rbp
-	movq $EXIT_SUCCESS,%rdi
-	movq $SYS_EXIT,%rax
+	movq DOLLAR(EXIT_SUCCESS),%rdi
+	movq DOLLAR(SYS_EXIT),%rax
 	syscall
 
 .err_out:
-	addq $48,%rsp
+	addq DOLLAR(48),%rsp
 	pop %rbp
-	movq $EXIT_FAILURE,%rdi
-	movq $SYS_EXIT,%rax
+	movq DOLLAR(EXIT_FAILURE),%rdi
+	movq DOLLAR(SYS_EXIT),%rax
 	syscall
 
 .open_file:
 	pushq %rbp
 	movq %rsp,%rbp
 	pushq %rdi
-	movq $SYS_OPEN,%rax
+	movq DOLLAR(SYS_OPEN),%rax
 	syscall
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .e
 	pop %rdi
 	pop %rbp
@@ -255,7 +262,7 @@ _start:
 .e:
 	pop %rdi
 	call .open_file_error
-	movq $-1,%rax
+	movq DOLLAR(-1),%rax
 	pop %rbp
 	ret
 
@@ -264,16 +271,16 @@ _start:
 	movq %rsp,%rbp
 	pushq %rdi
 	leaq e_open_file,%rsi
-	movq $e_fopen_len,%rdx
-	movq $STDOUT_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(e_fopen_len),%rdx
+	movq DOLLAR(STDOUT_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	pop %rsi
 	GET_STR_LEN %rsi
-	movq $STDOUT_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(STDOUT_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
-	PRINT_BYTE $0x0a
+	PRINT_BYTE DOLLAR(0x0a)
 	pop %rbp
 	ret
 
@@ -285,47 +292,47 @@ _start:
 .read_file:
 	pushq %rbp
 	movq %rsp,%rbp
-	subq $40,%rsp
+	subq DOLLAR(40),%rsp
 	movq %rdi,_FD
 	movq %rsi,_BUFFER
 	movq %rdx,_TOREAD
 	movq %r10,_FILENAME
-	movq $STDOUT_FILENO,%rdi
+	movq DOLLAR(STDOUT_FILENO),%rdi
 	leaq reading_file,%rsi
-	movq $reading_file_len,%rdx
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(reading_file_len),%rdx
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	movq _FILENAME,%rdi
 	GET_STR_LEN %rdi
 	movq _FILENAME,%rsi
-	movq $STDOUT_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(STDOUT_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
-	PRINT_BYTE $0x0a
+	PRINT_BYTE DOLLAR(0x0a)
 	movq _FD,%rdi
 	movq _BUFFER,%rsi
 	movq _TOREAD,%rdx
-	movq $SYS_READ,%rax
+	movq DOLLAR(SYS_READ),%rax
 	syscall
 	movq %rax,_BYTES_READ
-	cmpq $0,%rax
+	cmpq DOLLAR(0),%rax
 	jl .re
-	addq $40,%rsp
+	addq DOLLAR(40),%rsp
 	pop %rbp
 	ret
 .re:
-	movq $STDERR_FILENO,%rdi
+	movq DOLLAR(STDERR_FILENO),%rdi
 	leaq e_read_file,%rsi
-	movq $e_fread_len,%rdx
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(e_fread_len),%rdx
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
 	movq _FILENAME,%rsi
 	GET_STR_LEN %rsi
-	movq $STDERR_FILENO,%rdi
-	movq $SYS_WRITE,%rax
+	movq DOLLAR(STDERR_FILENO),%rdi
+	movq DOLLAR(SYS_WRITE),%rax
 	syscall
-	PRINT_BYTE $0x0a
-	addq $40,%rsp
+	PRINT_BYTE DOLLAR(0x0a)
+	addq DOLLAR(40),%rsp
 	pop %rbp
-	movq $-1,%rax
+	movq DOLLAR(-1),%rax
 	ret
