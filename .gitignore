@@ -4,6 +4,6 @@
 !.gitignore
 one_time_pad
 readfile
-spawnshell
+spawn_shell
 xor.out
 xor.key
