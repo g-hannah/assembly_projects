@@ -161,7 +161,6 @@ _start:
 	PRINT_WORD DOLLAR(0x0a22)
 	movq loc_ptr_infile,%rdi
 	movq DOLLAR(O_RDONLY),%rsi
-	ZERO %rdx
 	call .open_file
 	cmpq DOLLAR(0),%rax
 	jl .err_out
